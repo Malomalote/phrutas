@@ -3,17 +3,17 @@
 //  Máquina de estados, fusiones, energía, combos y peligro.
 // ============================================================
 
-import { CONFIG, STR, TIME, DIFICULTADES, escalaFrutas, recordDe, guardarRecordDe, fijarEscalaFrutas } from '../config.js?v=13';
-import { PhysicsEngine, jarGeometry, dangerY } from './physics.js?v=13';
-import { Fruit } from '../entities/fruit.js?v=13';
-import { Spawner } from '../entities/spawner.js?v=13';
-import { buildTextures } from '../render/textures.js?v=13';
-import { SceneRenderer } from '../render/renderer.js?v=13';
-import { ParticleSystem } from '../effects/particles.js?v=13';
-import { EffectsManager } from '../effects/effects.js?v=13';
-import { Sound } from '../audio/sound.js?v=13';
-import { HUD } from '../ui/hud.js?v=13';
-import { Overlays } from '../ui/overlays.js?v=13';
+import { CONFIG, STR, TIME, DIFICULTADES, escalaFrutas, recordDe, guardarRecordDe, fijarEscalaFrutas } from '../config.js?v=14';
+import { PhysicsEngine, jarGeometry, dangerY } from './physics.js?v=14';
+import { Fruit } from '../entities/fruit.js?v=14';
+import { Spawner } from '../entities/spawner.js?v=14';
+import { buildTextures } from '../render/textures.js?v=14';
+import { SceneRenderer } from '../render/renderer.js?v=14';
+import { ParticleSystem } from '../effects/particles.js?v=14';
+import { EffectsManager } from '../effects/effects.js?v=14';
+import { Sound } from '../audio/sound.js?v=14';
+import { HUD } from '../ui/hud.js?v=14';
+import { Overlays } from '../ui/overlays.js?v=14';
 
 const JAR = new Proxy({}, {
   // geometría SIEMPRE viva: main.js ajusta las bandas al redimensionar
@@ -45,6 +45,7 @@ export class Game {
     this.state = 'menu';
     this.score = 0;
     this.dificultad = DIFICULTADES[2]; // Media por defecto
+    this.fusionDoradas = false;       // opción del menú: dos doradas se funden
     this.best = this._loadBest();
     this.goldenFound = false;
     this.isRecord = false;
@@ -107,10 +108,14 @@ export class Game {
   }
 
   // ---------- Ciclo de partida ----------
-  start(dificultadId) {
+  start(dificultadId, fusionDoradas) {
     const D = DIFICULTADES.find((d) => d.id === dificultadId) || this.dificultad || DIFICULTADES[2];
     fijarEscalaFrutas(D.escala);   // la ÚNICA variación entre niveles: tamaño de frutas
     this.dificultad = D;
+    if (fusionDoradas !== undefined && fusionDoradas !== null) {
+      this.fusionDoradas = !!fusionDoradas;
+      try { localStorage.setItem(CONFIG.storage.fusionKey, this.fusionDoradas ? '1' : '0'); } catch { /* sin storage */ }
+    }
     this.physics.clear();
     this.particles.clear();
     this.effects.clear();
@@ -275,14 +280,17 @@ export class Game {
     Sound.warn(false);
     const records = {};
     for (const d of DIFICULTADES) records[d.id] = recordDe(d.id);
+    let fusionPre = this.fusionDoradas;
+    try { fusionPre = localStorage.getItem(CONFIG.storage.fusionKey) === '1'; } catch { /* sin storage */ }
     this.overlays.showStart({
       records,
       nivel: this.dificultad.id,
-      onPlay: (difId) => {
+      fusionDoradas: fusionPre,
+      onPlay: (difId, fusionOn) => {
         Sound.init();
         Sound.click();
         Sound.startMusic();
-        this.start(difId);
+        this.start(difId, fusionOn);
       },
     });
   }
@@ -290,8 +298,11 @@ export class Game {
   // ---------- Fusión ----------
   _merge(a, b) {
     if (this.state !== 'playing') return;
-    if (!a.alive || !b.alive || a.golden || b.golden) return;
+    if (!a.alive || !b.alive) return;
     if (a.tier !== b.tier) return;
+    // las doradas solo participan en la fusión máxima, y solo si se activó
+    const dobleDorada = a.golden && b.golden;
+    if ((a.golden || b.golden) && !(dobleDorada && this.fusionDoradas)) return;
 
     const mx = (a.x + b.x) / 2;
     const my = (a.y + b.y) / 2;
@@ -305,6 +316,25 @@ export class Game {
     this.combo = combo;
     this.maxCombo = Math.max(this.maxCombo, combo);
     this.lastMergeAt = now();
+
+    // ── Nivel máximo: dos sandías doradas se funden y DESAPARECEN ──
+    if (dobleDorada) {
+      const pts = CONFIG.golden.mergeScore * combo;
+      this._fusionDoradaMoment(mx, my, pts, combo);
+      this.score += pts;
+      this.energy = Math.min(CONFIG.energy.max, this.energy + CONFIG.energy.mergeGain);
+      if (this.score > this._startBest && !this._recordNotified) {
+        this._recordNotified = true;
+        this.hud.recordSurpassed();
+      }
+      this.hud.flashEvolution(10);
+      this.hud.setScore(this.score);
+      if (this.score > this.best) {
+        this.best = this.score;
+        this.hud.setBest(this.best);
+      }
+      return; // no nace fruta nueva: se aniquilan
+    }
 
     const isGolden = a.tier >= 10;
     // el clímax se celebra dentro de cuadro: nunca por encima del tercio superior
@@ -363,6 +393,22 @@ export class Game {
   _impulseUp(f, vy) {
     // pequeño brillo de nacimiento al fusionar (Matter es global, cargado en index.html)
     if (f.body) Matter.Body.setVelocity(f.body, { x: 0, y: vy });
+  }
+
+  // Aniquilación de dos doradas: el evento máximo del juego se lleva las dos
+  _fusionDoradaMoment(x, y, pts, combo) {
+    this.effects.goldenBanner(STR.goldenFusionLabel);
+    this.effects.flash('#ffe9a3', 0.35);
+    this.effects.shake(18);
+    this.particles.confettiBurst(x, y, ['#ffd76e', '#ffb347', '#fff6d8', '#ff5a7e', '#8bc34a']);
+    this.particles.sparkles(x, y, '#ffe9a3', 30);
+    this.particles.ring(x, y, 150, '#ffd76e');
+    this.particles.juiceBurst(x, y, '#ffd76e', 140);
+    this.effects.popup(x, y - 170, '+' + pts, { color: '#ffd76e', size: 52 });
+    if (combo >= 2) this.effects.comboBanner(combo);
+    Sound.golden();
+    TIME.scale = 0.3;
+    this.slowmoUntil = now() + CONFIG.juice.slowmoOnGolden;
   }
 
   _goldenMoment(x, y) {

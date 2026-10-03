@@ -4,7 +4,7 @@
 //  detección de fusiones e impactos. Mundo lógico 720×1080.
 // ============================================================
 
-import { CONFIG } from '../config.js?v=13';
+import { CONFIG } from '../config.js?v=14';
 
 const { Engine, Bodies, Body, Composite, Events, Sleeping } = Matter;
 

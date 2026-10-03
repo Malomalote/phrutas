@@ -3,8 +3,8 @@
 //  El DOM es fijo (index.html): aquí solo se cachea, anima y pinta.
 // ============================================================
 
-import { CONFIG, STR } from '../config.js?v=13';
-import { fruitTexture, MARGEN } from '../render/textures.js?v=13';
+import { CONFIG, STR } from '../config.js?v=14';
+import { fruitTexture, MARGEN } from '../render/textures.js?v=14';
 
 // Formato es-ES con separador de miles
 const fmt = (n) => Math.round(n).toLocaleString('es-ES');

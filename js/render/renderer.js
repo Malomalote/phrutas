@@ -6,9 +6,9 @@
 //  lo aplica main.js con su transform.
 // ============================================================
 
-import { jarGeometry, dangerY } from '../core/physics.js?v=13';
-import { fruitTexture, MARGEN } from './textures.js?v=13';
-import { CONFIG } from '../config.js?v=13';
+import { jarGeometry, dangerY } from '../core/physics.js?v=14';
+import { fruitTexture, MARGEN } from './textures.js?v=14';
+import { CONFIG } from '../config.js?v=14';
 
 const TAU = Math.PI * 2;
 const POP_MS = 260; // duración del pop-in de nacimiento

@@ -4,7 +4,7 @@
 //  y flash a pantalla. Mundo lógico 720×1080.
 // ============================================================
 
-import { CONFIG, STR } from '../config.js?v=13';
+import { CONFIG, STR } from '../config.js?v=14';
 
 const TAU = Math.PI * 2;
 const FONT = '"Baloo 2","Nunito",system-ui,sans-serif';

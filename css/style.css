@@ -1446,3 +1446,52 @@ kbd {
   color: #b8b2cc;
   white-space: nowrap;
 }
+
+/* ── Interruptor de la opción "Fusión de sandías doradas" (menú) ── */
+.opt-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(6px, 1.2vmin, 10px);
+  margin: clamp(8px, 1.6vmin, 14px) auto clamp(2px, 0.6vmin, 5px);
+  padding: clamp(6px, 1.1vmin, 9px) clamp(12px, 2vmin, 18px);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--cream);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  max-width: 100%;
+}
+.opt-toggle:hover { border-color: rgba(255, 255, 255, 0.3); }
+.opt-toggle:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+.opt-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(11px, 2vmin, 13px);
+  white-space: nowrap;
+}
+.opt-switch {
+  position: relative;
+  flex: none;
+  width: 34px;
+  height: 18px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  transition: background 0.2s;
+}
+.opt-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #cfc4ea;
+  transition: transform 0.2s var(--ease-out), background 0.2s;
+}
+.opt-toggle.on { border-color: rgba(143, 229, 142, 0.45); }
+.opt-toggle.on .opt-switch { background: linear-gradient(135deg, #6db34a, #8ef58e); }
+.opt-toggle.on .opt-knob { transform: translateX(16px); background: #ffffff; }
+.opt-state { font-size: 10px; color: #b8b2cc; min-width: 72px; text-align: left; }
+.opt-toggle.on .opt-state { color: #8ef58e; }

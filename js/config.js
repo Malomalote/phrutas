@@ -79,6 +79,9 @@ export const CONFIG = {
     tier: 10,                  // índice de la sandía en CONFIG.fruits
     bonusScore: 200,
     label: '¡SANDÍA DORADA!',
+    // Fusión de dos doradas (opcional): desaparecen y dan el máximo del juego.
+    // Proporcional a la cadena: sandía 66 → dorada 200 (×3) → fusión 600 (×3)
+    mergeScore: 600,
   },
 
   // ----- Aparición -----
@@ -116,6 +119,7 @@ export const CONFIG = {
     tutorialKey: 'sandia-jelly-tutor-v1',
     recordPrefix: 'sandia-jelly-record-',     // + id de nivel + '-v1'
     nivelKey: 'sandia-jelly-nivel-v1',        // último nivel elegido en el menú
+    fusionKey: 'sandia-jelly-fusiondorada-v1', // opción de fusión de doradas
   },
 };
 
@@ -196,6 +200,12 @@ export const STR = {
   combo: '¡COMBO ×',
   warning: '¡Cuidado! El tarro está lleno',
   goldenUnlocked: '¡Has forjado la sandía dorada!',
+
+  // Opción de fusión de sandías doradas (menú, desactivada por defecto)
+  fusionDoradas: 'Fusión de sandías doradas',
+  activada: 'Activada',
+  desactivada: 'Desactivada',
+  goldenFusionLabel: '¡FUSIÓN DORADA!',
 
   controls: {
     mouse: 'Ratón o ← → para apuntar',

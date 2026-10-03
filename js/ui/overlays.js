@@ -3,8 +3,8 @@
 //  Construye el contenido de #overlay (el CSS hace el vidrio y el blur).
 // ============================================================
 
-import { CONFIG, STR, DIFICULTADES } from '../config.js?v=13';
-import { fruitTexture, MARGEN } from '../render/textures.js?v=13';
+import { CONFIG, STR, DIFICULTADES } from '../config.js?v=14';
+import { fruitTexture, MARGEN } from '../render/textures.js?v=14';
 
 const fmt = (n) => Math.round(n).toLocaleString('es-ES');
 const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
@@ -156,7 +156,7 @@ export class Overlays {
   // ------------------------------------------------------------
   //  Pantalla de inicio
   // ------------------------------------------------------------
-  showStart({ best, onPlay, records = {}, nivel = 'media' }) {
+  showStart({ best, onPlay, records = {}, nivel = 'media', fusionDoradas = false }) {
     const p = this._el('div', 'screen-start');
 
     // Logo tipográfico en bloque: SANDÍA / JELLY apiladas, mismo
@@ -195,6 +195,26 @@ export class Overlays {
     }
     p.append(difRow);
 
+    // Opción: fusión de sandías doradas (desactivada por defecto)
+    const opt = this._el('button', 'opt-toggle');
+    opt.type = 'button';
+    opt.setAttribute('role', 'switch');
+    let fusionOn = !!fusionDoradas;
+    const optState = this._el('span', 'opt-state');
+    const pintar = () => {
+      opt.classList.toggle('on', fusionOn);
+      opt.setAttribute('aria-checked', String(fusionOn));
+      optState.textContent = fusionOn ? STR.activada : STR.desactivada;
+    };
+    opt.append(
+      this._el('span', 'opt-name', STR.fusionDoradas),
+      this._el('span', 'opt-switch', '<span class="opt-knob"></span>'),
+      optState
+    );
+    pintar();
+    opt.addEventListener('click', () => { fusionOn = !fusionOn; pintar(); });
+    p.append(opt);
+
     p.append(this._el('p', 'subtitle', STR.subtitle));
     p.append(this._el('p', 'tagline', STR.tagline));
 
@@ -222,7 +242,7 @@ export class Overlays {
     p.append(card);
 
     const play = this._button(STR.play, 'btn primary big');
-    play.addEventListener('click', () => onPlay(selNivel));
+    play.addEventListener('click', () => onPlay(selNivel, fusionOn));
     p.append(play);
 
     this._open(p, 'start-panel', STR.title);

@@ -5,7 +5,7 @@
 //  oclusión ambiental, doble especular, grano y decorado propio.
 // ============================================================
 
-import { CONFIG } from '../config.js?v=13';
+import { CONFIG } from '../config.js?v=14';
 
 const TAU = Math.PI * 2;
 // lado del sprite = diámetro × 2.36 (~18% de aire por lado). Exportado: quien

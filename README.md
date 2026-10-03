@@ -30,6 +30,10 @@ También existe la tarea `npm start` (usa el mismo puerto).
 - **Niveles de dificultad**: Muy difícil, Difícil, Media, Baja y Muy baja. La única
   variación es el tamaño de las frutas (−0 % a −20 %) y cada nivel tiene su propio
   récord guardado.
+- **Fusión de sandías doradas** (opción del menú, desactivada por defecto): al
+  activarla, dos sandías doradas en contacto se funden y **desaparecen** del tablero,
+  otorgando la puntuación máxima del juego (600 = la misma proporción ×3 que sigue
+  la cadena sandía 66 → dorada 200), multiplicada por el combo.
 - **Energía**: cada fusión suma +2. Con ella puedes **inclinar el tarro** (10/s) o
   **amasar la gelatina** (−60), que hace vibrar todo el tarro. La primera vez que juegas,
   una guía contextual junto a la barra lo explica y no vuelve a molestar.
