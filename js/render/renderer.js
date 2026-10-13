@@ -6,9 +6,9 @@
 //  lo aplica main.js con su transform.
 // ============================================================
 
-import { jarGeometry, dangerY } from '../core/physics.js?v=14';
-import { fruitTexture, MARGEN } from './textures.js?v=14';
-import { CONFIG } from '../config.js?v=14';
+import { jarGeometry, dangerY } from '../core/physics.js?v=15';
+import { fruitTexture, drawFruitTexture, MARGEN } from './textures.js?v=15';
+import { CONFIG } from '../config.js?v=15';
 
 const TAU = Math.PI * 2;
 const POP_MS = 260; // duración del pop-in de nacimiento
@@ -115,6 +115,7 @@ export class SceneRenderer {
     this.ctx = canvas.getContext('2d', { alpha: true });
     this._stars = null;
     this._bubbles = null;
+    this._jarFrontCache = null;
     this.softenWobble = 0; // ondulación del cristal durante el amasado (0..1)
   }
 
@@ -325,7 +326,7 @@ export class SceneRenderer {
       ctx.translate(x, y);
       ctx.rotate(fr.wobbleAngle || 0);
       ctx.scale((fr.sx == null ? 1 : fr.sx) * pop, (fr.sy == null ? 1 : fr.sy) * pop);
-      ctx.drawImage(tex, -half, -half, half * 2, half * 2);
+      drawFruitTexture(ctx, tex, -half, -half, half * 2, half * 2);
       ctx.restore();
     }
   }
@@ -387,7 +388,7 @@ export class SceneRenderer {
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(rot);
-    ctx.drawImage(tex, -half, -half, half * 2, half * 2);
+    drawFruitTexture(ctx, tex, -half, -half, half * 2, half * 2);
     ctx.restore();
 
     // aviso de bloqueo: aro fino rojo SOLO cuando blocked
@@ -417,6 +418,36 @@ export class SceneRenderer {
   // ── Cristal delantero (encima de las frutas) ──
   // intensity (opcional, 0..1): ondula los cantos interiores durante el amasado
   drawJarFront(ctx, t, intensity = this.softenWobble || 0) {
+    if (intensity > 0) {
+      this._drawJarFront(ctx, t, intensity);
+      return;
+    }
+    const g = jarGeometry();
+    const width = this.canvas.width;
+    const height = this.canvas.height;
+    const worldWidth = CONFIG.world.width;
+    const gt = CONFIG.jar.glassThickness;
+    const cr = CONFIG.jar.cornerRadius;
+    let cache = this._jarFrontCache;
+    if (!cache || cache.width !== width || cache.height !== height ||
+        cache.worldWidth !== worldWidth || cache.left !== g.left ||
+        cache.right !== g.right || cache.top !== g.top || cache.bottom !== g.bottom ||
+        cache.gt !== gt || cache.cr !== cr) {
+      const layer = cache ? cache.layer : document.createElement('canvas');
+      layer.width = width;
+      layer.height = height;
+      const scale = width / worldWidth;
+      const layerCtx = layer.getContext('2d');
+      layerCtx.setTransform(scale, 0, 0, scale, 0, 0);
+      this._drawJarFront(layerCtx, 0, 0);
+      cache = { layer, width, height, worldWidth, ...g, gt, cr };
+      this._jarFrontCache = cache;
+    }
+    const scale = width / worldWidth;
+    ctx.drawImage(cache.layer, 0, 0, width / scale, height / scale);
+  }
+
+  _drawJarFront(ctx, t, intensity) {
     const g0 = jarGeometry();
     const gt = CONFIG.jar.glassThickness;
     const cr = CONFIG.jar.cornerRadius;

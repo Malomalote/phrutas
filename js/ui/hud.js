@@ -3,8 +3,8 @@
 //  El DOM es fijo (index.html): aquí solo se cachea, anima y pinta.
 // ============================================================
 
-import { CONFIG, STR } from '../config.js?v=14';
-import { fruitTexture, MARGEN } from '../render/textures.js?v=14';
+import { CONFIG, STR } from '../config.js?v=15';
+import { fruitTexture, drawFruitTexture, MARGEN } from '../render/textures.js?v=15';
 
 // Formato es-ES con separador de miles
 const fmt = (n) => Math.round(n).toLocaleString('es-ES');
@@ -57,6 +57,7 @@ export class HUD {
     this._nextTier = null;      // último tier dibujado en #next-canvas
     this._dangerTimer = null;
     this._softenHTML = this.softenText.innerHTML; // etiqueta original del botón
+    this._softenActive = null;
     this.recordMini = null;     // mini-badge "¡RÉCORD!" (récord en vivo)
 
     this.energyLabel.textContent = STR.energy;
@@ -130,7 +131,7 @@ export class HUD {
       // zoom ×MARGEN centrado: el cuerpo de la fruta (1/MARGEN del sprite)
       // pasa a ocupar ~el 94% del icono en vez de perderse en el aire del lienzo
       const zoom = size * 2 * MARGEN * 0.94;
-      ctx.drawImage(fruitTexture(i), (c.width - zoom) / 2, (c.height - zoom) / 2, zoom, zoom);
+      drawFruitTexture(ctx, fruitTexture(i), (c.width - zoom) / 2, (c.height - zoom) / 2, zoom, zoom);
 
       const name = document.createElement('span');
       name.className = 'evo-name';
@@ -289,7 +290,7 @@ export class HUD {
     // no el sprite entero con su aire
     const w = this.nextCanvas.width;
     const side = w * MARGEN * 0.9;
-    ctx.drawImage(fruitTexture(tier), (w - side) / 2, (w - side) / 2, side, side);
+    drawFruitTexture(ctx, fruitTexture(tier), (w - side) / 2, (w - side) / 2, side, side);
   }
 
   // ------------------------------------------------------------
@@ -347,6 +348,9 @@ export class HUD {
 
   // Estado del botón "Amasar": ✋ Amasando… (con −60) / etiqueta original
   setSoftenActive(active) {
+    active = !!active;
+    if (this._softenActive === active) return;
+    this._softenActive = active;
     this.softenBtn.classList.toggle('active', active);
     this.softenBtn.setAttribute('aria-pressed', String(active));
     // Terminología del juego: "amasar", nunca "gelatina"

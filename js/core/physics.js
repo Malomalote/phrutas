@@ -4,7 +4,7 @@
 //  detección de fusiones e impactos. Mundo lógico 720×1080.
 // ============================================================
 
-import { CONFIG } from '../config.js?v=14';
+import { CONFIG } from '../config.js?v=15';
 
 const { Engine, Bodies, Body, Composite, Events, Sleeping } = Matter;
 
@@ -56,6 +56,7 @@ export class PhysicsEngine {
     this._tiltAngle = 0;               // ángulo suavizado actual (rad)
     this._acc = 0;                     // acumulador de tiempo (ms)
     this._soften = false;              // modo "amasar" activo
+    this._surfaceDirty = false;        // cuerpos nuevos pendientes de configurar
     this._mergeCb = null;
     this._impactCb = null;
     this._pendingPairs = new Map();    // dedupe de pares por tick (claves por ids)
@@ -119,6 +120,7 @@ export class PhysicsEngine {
     body.plugin.fruit = fruit;
     fruit.body = body;
     this._fruits.add(fruit);
+    this._surfaceDirty = true;
     Composite.add(this.engine.world, body);
     return body;
   }
@@ -145,18 +147,20 @@ export class PhysicsEngine {
     this._pendingPairs.clear();
     this._pendingImpacts.clear();
     this._acc = 0;
+    this._surfaceDirty = false;
   }
 
   // ----- Inclinación: gravedad orientada con suavizado -----
 
   setTiltTarget(angleRad) {
     const max = CONFIG.physics.tilt.maxAngle;
-    this._tiltTarget = Number.isFinite(angleRad)
+    const target = Number.isFinite(angleRad)
       ? Math.min(Math.max(angleRad, -max), max)
       : 0;
+    if (target === this._tiltTarget && !this._surfaceDirty) return;
+    this._tiltTarget = target;
     // al inclinar, la fricción baja: si no, la estática anula el deslizamiento
     this._applySurfaceFriction();
-    this.wakeAll(); // cuerpos dormidos no responderían a la nueva gravedad
   }
 
   get tiltAngle() {
@@ -186,6 +190,7 @@ export class PhysicsEngine {
       b.frictionStatic = friction * 1.4;
       b.restitution = restitution;
     }
+    this._surfaceDirty = false;
     this.wakeAll();
   }
 

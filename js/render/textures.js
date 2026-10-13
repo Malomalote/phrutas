@@ -5,13 +5,14 @@
 //  oclusión ambiental, doble especular, grano y decorado propio.
 // ============================================================
 
-import { CONFIG } from '../config.js?v=14';
+import { CONFIG } from '../config.js?v=15';
 
 const TAU = Math.PI * 2;
-// lado del sprite = diámetro × 2.36 (~18% de aire por lado). Exportado: quien
-// dibuja el sprite debe escalarlo por este factor para que la fruta horneada
+// Lado virtual del sprite = diámetro × 2.36. drawFruitTexture conserva ese
+// encuadre al dibujar la textura recortada, para que la fruta horneada
 // coincida exactamente con su círculo de física.
 export const MARGEN = 2.36;
+const spriteBounds = new WeakMap();
 
 // ── RNG determinista (mulberry32): texturas idempotentes ──
 function mulberry32(seed) {
@@ -1099,7 +1100,53 @@ function renderFruit(i, golden) {
   const fctx = final.getContext('2d');
   fctx.filter = 'saturate(1.44) contrast(1.12) brightness(1.04)';
   fctx.drawImage(cv, 0, 0);
-  return final;
+  cv.width = cv.height = 0; // liberar el lienzo de trabajo tras hornear
+  return cropTexture(final);
+}
+
+// Medir una sola vez: conserva todos los píxeles y espacio para el suavizado
+// de los iconos pequeños. Los offsets mantienen el encuadre del sprite original.
+function cropTexture(source) {
+  const side = source.width;
+  const pixels = source.getContext('2d').getImageData(0, 0, side, side).data;
+  let left = side, top = side, right = -1, bottom = -1;
+  for (let y = 0; y < side; y++) {
+    for (let x = 0; x < side; x++) {
+      if (pixels[(y * side + x) * 4 + 3] === 0) continue;
+      if (x < left) left = x;
+      if (x > right) right = x;
+      if (y < top) top = y;
+      if (y > bottom) bottom = y;
+    }
+  }
+  if (right < 0) return source;
+  const padding = 32;
+  left = Math.max(0, left - padding);
+  top = Math.max(0, top - padding);
+  right = Math.min(side - 1, right + padding);
+  bottom = Math.min(side - 1, bottom + padding);
+  const cropped = document.createElement('canvas');
+  cropped.width = right - left + 1;
+  cropped.height = bottom - top + 1;
+  cropped.getContext('2d').drawImage(source,
+    left, top, cropped.width, cropped.height, 0, 0, cropped.width, cropped.height);
+  spriteBounds.set(cropped, { side, left, top });
+  source.width = source.height = 0;
+  return cropped;
+}
+
+// x/y/width/height siguen describiendo el lienzo completo anterior al recorte.
+export function drawFruitTexture(ctx, texture, x, y, width, height) {
+  const bounds = spriteBounds.get(texture);
+  if (!bounds) {
+    ctx.drawImage(texture, x, y, width, height);
+    return;
+  }
+  const sx = width / bounds.side;
+  const sy = height / bounds.side;
+  ctx.drawImage(texture,
+    x + bounds.left * sx, y + bounds.top * sy,
+    texture.width * sx, texture.height * sy);
 }
 
 // ── Cache global de texturas ──
@@ -1113,7 +1160,7 @@ export function buildTextures() {
   return cache;
 }
 
-// Textura cuadrada de la fruta: lado = ceil(r*2*2.36*2), fruta centrada
+// Textura recortada; drawFruitTexture conserva el encuadre original.
 export function fruitTexture(tier, golden = false) {
   const i = Math.max(0, Math.min(tier, CONFIG.fruits.length - 1));
   const key = i + ':' + (golden ? 'g' : 'n');
@@ -1135,6 +1182,6 @@ export function fruitIcon(tier, size, golden = false) {
   const ctx = cv.getContext('2d');
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(src, 0, 0, s, s);
+  drawFruitTexture(ctx, src, 0, 0, s, s);
   return cv;
 }

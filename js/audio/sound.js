@@ -4,7 +4,7 @@
 //  Música ambiental premium + SFX jugosos, todo sintetizado.
 // ============================================================
 
-import { CONFIG } from '../config.js?v=14';
+import { CONFIG } from '../config.js?v=15';
 
 // ----- utilidades -----
 function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
@@ -27,6 +27,9 @@ export const Sound = {
   _musicWanted: false,
   _music: null,       // { bus, nodes[], state }
   _warnTimer: 0,
+  _warnWanted: false,
+  _voices: new Set(),
+  _mutedMusicClock: null,
 
   get isMuted() { return this._muted; },
 
@@ -68,6 +71,7 @@ export const Sound = {
 
       this.initialized = true;
       if (this._musicWanted) this.startMusic();
+      this._syncAudio();
     } catch (e) {
       this.initialized = false; // autoplay bloqueado: seguir sin audio
     }
@@ -80,9 +84,60 @@ export const Sound = {
       this.mus.gain.cancelScheduledValues(t);
       this.mus.gain.setTargetAtTime(this._muted ? 0 : 0.55, t, 0.05);
     }
+    return this._syncAudio();
   },
 
-  // Silenciar solo corta la salida: el contexto puede seguir vivo.
+  // Suspender también detiene el hardware y el reloj de WebAudio. Las notas
+  // efímeras se cancelan para que no reaparezcan al volver a activar el sonido.
+  _syncAudio() {
+    if (!this.initialized || this.ctx.state === 'closed') return Promise.resolve();
+    const ctx = this.ctx;
+    if (this._muted) {
+      if (this._music) {
+        if (!this._mutedMusicClock) {
+          this._mutedMusicClock = { audio: ctx.currentTime, wall: performance.now() };
+        }
+        clearInterval(this._music.state.timer);
+        this._music.state.timer = 0;
+      }
+      clearInterval(this._warnTimer);
+      this._warnTimer = 0;
+      for (const nodes of this._voices) {
+        for (const node of nodes) {
+          if (typeof node.stop === 'function') node.stop();
+          node.disconnect();
+        }
+      }
+      this._voices.clear();
+      return ctx.suspend().catch(() => {});
+    }
+    // La petición de resume sale en el gesto del usuario. Comprobar el estado
+    // al resolver impide reabrir timers tras una secuencia rápida de toggles.
+    return ctx.resume().then(() => {
+      if (this._muted || this.ctx !== ctx || ctx.state !== 'running') return;
+      if (this._music && this._mutedMusicClock) {
+        const clock = this._mutedMusicClock;
+        const virtualNow = clock.audio + (performance.now() - clock.wall) / 1000;
+        const state = this._music.state;
+        const skipped = Math.max(0, Math.ceil((virtualNow + 0.35 - state.next) / SIXTEENTH));
+        state.step += skipped;
+        state.next += skipped * SIXTEENTH + ctx.currentTime - virtualNow;
+      }
+      this._mutedMusicClock = null;
+      if (this._musicWanted) this.startMusic();
+      this._resumeMusic();
+      if (this._warnWanted) this.warn(true);
+    }).catch(() => {});
+  },
+
+  _trackVoice(source, nodes) {
+    this._voices.add(nodes);
+    source.onended = () => {
+      this._voices.delete(nodes);
+      for (const node of nodes) node.disconnect();
+    };
+  },
+
   _ok() { return this.initialized && !this._muted; },
   _now() { return this.ctx.currentTime; },
 
@@ -102,6 +157,7 @@ export const Sound = {
     g.connect(o.dest || this.sfx);
     osc.start(t0);
     osc.stop(t0 + dur + 0.05);
+    this._trackVoice(osc, [osc, g]);
     return { osc, g };
   },
 
@@ -123,6 +179,7 @@ export const Sound = {
     g.connect(o.dest || this.sfx);
     src.start(t0);
     src.stop(t0 + dur + 0.05);
+    this._trackVoice(src, [src, f, g]);
     return { f, g };
   },
 
@@ -150,13 +207,14 @@ export const Sound = {
     mod.start(t0);
     car.stop(t0 + dur + 0.05);
     mod.stop(t0 + dur + 0.05);
+    this._trackVoice(car, [car, mod, mg, g]);
   },
 
   // ===== música ambiental (delicada, marimba + pad cálido + delay) =====
 
   startMusic() {
     this._musicWanted = true;
-    if (!this.initialized || this._music) return;
+    if (!this.initialized || this._muted || this._music) return;
     const ctx = this.ctx;
 
     // bus con delay-feedback suave para espacialidad
@@ -207,13 +265,19 @@ export const Sound = {
 
     // secuenciador con lookahead de 350ms cada 100ms
     const state = { next: ctx.currentTime + 0.15, step: 0, timer: 0 };
-    state.timer = setInterval(() => this._schedule(state, bus), 100);
     this._music = { bus, nodes, state };
+    this._resumeMusic();
+  },
+
+  _resumeMusic() {
+    if (!this._music || this._muted || this._music.state.timer) return;
+    const { state, bus } = this._music;
+    state.timer = setInterval(() => this._schedule(state, bus), 100);
     this._schedule(state, bus);
   },
 
   _schedule(state, bus) {
-    if (!this._music || !this.initialized) return;
+    if (!this._music || !this.initialized || this._muted) return;
     const ahead = this._now() + 0.35;
     while (state.next < ahead) {
       const s = state.step % 16;
@@ -252,6 +316,7 @@ export const Sound = {
     o2.start(t);
     o1.stop(t + 0.55);
     o2.stop(t + 0.55);
+    this._trackVoice(o1, [o1, o2, g2, g]);
   },
 
   stopMusic() {
@@ -259,6 +324,7 @@ export const Sound = {
     if (!this._music) return;
     const m = this._music;
     this._music = null;
+    this._mutedMusicClock = null;
     clearInterval(m.state.timer);
     const t = this._now();
     m.bus.gain.cancelScheduledValues(t);
@@ -337,6 +403,7 @@ export const Sound = {
       lg.connect(v.osc.frequency);
       lfo.start(tt);
       lfo.stop(tt + 0.85);
+      this._trackVoice(lfo, [lfo, lg]);
     });
     this._noise(t, 1.6, { type: 'lowpass', freq: 220, peak: 0.12, attack: 0.05 });
   },
@@ -369,6 +436,7 @@ export const Sound = {
     lg.connect(n.f.Q);
     lfo.start(t);
     lfo.stop(t + 0.6);
+    this._trackVoice(lfo, [lfo, lg]);
     for (let i = 0; i < 4; i++) {
       const tt = t + 0.05 + i * 0.11 + Math.random() * 0.04;
       const f = 140 + Math.random() * 220;
@@ -378,8 +446,9 @@ export const Sound = {
 
   // latido de peligro (arranca/para)
   warn(on) {
+    this._warnWanted = !!on;
     if (on) {
-      if (!this.initialized || this._warnTimer) return;
+      if (!this.initialized || this._muted || this._warnTimer) return;
       this._heartbeat();
       this._warnTimer = setInterval(() => this._heartbeat(), 600);
     } else if (this._warnTimer) {

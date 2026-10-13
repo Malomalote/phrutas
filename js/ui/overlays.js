@@ -3,8 +3,8 @@
 //  Construye el contenido de #overlay (el CSS hace el vidrio y el blur).
 // ============================================================
 
-import { CONFIG, STR, DIFICULTADES } from '../config.js?v=14';
-import { fruitTexture, MARGEN } from '../render/textures.js?v=14';
+import { CONFIG, STR, DIFICULTADES } from '../config.js?v=15';
+import { fruitTexture, drawFruitTexture, MARGEN } from '../render/textures.js?v=15';
 
 const fmt = (n) => Math.round(n).toLocaleString('es-ES');
 const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
@@ -84,7 +84,7 @@ export class Overlays {
     ctx.imageSmoothingQuality = 'high';
     // zoom ×MARGEN: el cuerpo de la fruta llena el icono, no el aire del sprite
     const side = px * MARGEN * 0.94;
-    ctx.drawImage(fruitTexture(tier), (px - side) / 2, (px - side) / 2, side, side);
+    drawFruitTexture(ctx, fruitTexture(tier), (px - side) / 2, (px - side) / 2, side, side);
     return c;
   }
 
@@ -100,7 +100,7 @@ export class Overlays {
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
     const side = c.width * MARGEN * 0.94;
-    ctx.drawImage(fruitTexture(tier, golden), (c.width - side) / 2, (c.height - side) / 2, side, side);
+    drawFruitTexture(ctx, fruitTexture(tier, golden), (c.width - side) / 2, (c.height - side) / 2, side, side);
     return c;
   }
 

@@ -2,9 +2,9 @@
 //  SANDÍA JELLY · Arranque, escalado, entrada y bucle principal
 // ============================================================
 
-import { CONFIG, migrarRecordLegacy } from './config.js?v=14';
-import { Game } from './core/game.js?v=14';
-import { Sound } from './audio/sound.js?v=14';
+import { CONFIG, migrarRecordLegacy } from './config.js?v=15';
+import { Game } from './core/game.js?v=15';
+import { Sound } from './audio/sound.js?v=15';
 
 const stage = document.getElementById('stage');
 const canvas = document.getElementById('game-canvas');

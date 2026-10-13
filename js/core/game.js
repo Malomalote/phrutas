@@ -3,17 +3,17 @@
 //  Máquina de estados, fusiones, energía, combos y peligro.
 // ============================================================
 
-import { CONFIG, STR, TIME, DIFICULTADES, escalaFrutas, recordDe, guardarRecordDe, fijarEscalaFrutas } from '../config.js?v=14';
-import { PhysicsEngine, jarGeometry, dangerY } from './physics.js?v=14';
-import { Fruit } from '../entities/fruit.js?v=14';
-import { Spawner } from '../entities/spawner.js?v=14';
-import { buildTextures } from '../render/textures.js?v=14';
-import { SceneRenderer } from '../render/renderer.js?v=14';
-import { ParticleSystem } from '../effects/particles.js?v=14';
-import { EffectsManager } from '../effects/effects.js?v=14';
-import { Sound } from '../audio/sound.js?v=14';
-import { HUD } from '../ui/hud.js?v=14';
-import { Overlays } from '../ui/overlays.js?v=14';
+import { CONFIG, STR, TIME, DIFICULTADES, escalaFrutas, recordDe, guardarRecordDe, fijarEscalaFrutas } from '../config.js?v=15';
+import { PhysicsEngine, jarGeometry, dangerY } from './physics.js?v=15';
+import { Fruit } from '../entities/fruit.js?v=15';
+import { Spawner } from '../entities/spawner.js?v=15';
+import { buildTextures } from '../render/textures.js?v=15';
+import { SceneRenderer } from '../render/renderer.js?v=15';
+import { ParticleSystem } from '../effects/particles.js?v=15';
+import { EffectsManager } from '../effects/effects.js?v=15';
+import { Sound } from '../audio/sound.js?v=15';
+import { HUD } from '../ui/hud.js?v=15';
+import { Overlays } from '../ui/overlays.js?v=15';
 
 const JAR = new Proxy({}, {
   // geometría SIEMPRE viva: main.js ajusta las bandas al redimensionar
@@ -42,6 +42,7 @@ export class Game {
     this.spawner = new Spawner();
 
     this.fruits = [];
+    this._fruitsDirty = false;
     this.state = 'menu';
     this.score = 0;
     this.dificultad = DIFICULTADES[2]; // Media por defecto
@@ -120,6 +121,7 @@ export class Game {
     this.particles.clear();
     this.effects.clear();
     this.fruits = [];
+    this._fruitsDirty = false;
     this.spawner = new Spawner();
     this.score = 0;
     this.energy = CONFIG.energy.start;
@@ -273,6 +275,7 @@ export class Game {
     this.physics.clear();
     this.particles.clear();
     this.fruits = [];
+    this._fruitsDirty = false;
     this.physics.setTiltTarget(0);
     this.physics.setSoften(false);
     this.tiltDir = 0;
@@ -307,6 +310,7 @@ export class Game {
     const mx = (a.x + b.x) / 2;
     const my = (a.y + b.y) / 2;
     a.kill(); b.kill();
+    this._fruitsDirty = true;
     this.physics.removeFruit(a);
     this.physics.removeFruit(b);
 
@@ -474,6 +478,7 @@ export class Game {
       const f = this.dieQueue.shift();
       if (f.alive) {
         f.kill();
+        this._fruitsDirty = true;
         this.physics.removeFruit(f);
         const spec = CONFIG.fruits[Math.min(f.tier, 10)];
         this.particles.juiceBurst(f.x, f.y, spec.juice, f.radius * 0.8);
@@ -561,9 +566,6 @@ export class Game {
       for (const f of this.fruits) if (f.alive) f.update(dt);
       this._dangerStep(dtReal);
 
-      // purga periódica de frutas muertas
-      if (this.fruits.length > 60) this.fruits = this.fruits.filter((f) => f.alive);
-
       // geometría de apuntado; "blocked" ya no bloquea el soltado: solo tiñe
       // de rojo el marcador como aviso de que el aterrizaje queda sobre la línea
       const r = CONFIG.fruits[this.spawner.current].radius;
@@ -575,6 +577,16 @@ export class Game {
       this.physics.step(dt * 0.4);
       for (const f of this.fruits) if (f.alive) f.update(dt);
       this._dyingStep(dtReal);
+    }
+
+    // Compactación estable, solo tras una baja y sin asignar otro array.
+    if (this._fruitsDirty) {
+      let live = 0;
+      for (const fruit of this.fruits) {
+        if (fruit.alive) this.fruits[live++] = fruit;
+      }
+      this.fruits.length = live;
+      this._fruitsDirty = false;
     }
 
     this.particles.update(dt);
@@ -611,7 +623,7 @@ export class Game {
 
     this.renderer.drawBackground(ctx, t);
     this.renderer.drawJarBack(ctx, t);
-    this.renderer.drawFruits(ctx, this.fruits.filter((f) => f.alive), t);
+    this.renderer.drawFruits(ctx, this.fruits, t);
     if (this.state === 'playing' && this.dropCd < CONFIG.spawn.dropCooldown * 0.55) {
       this.renderer.drawAim(ctx, this.spawner.current, this.aimX, aimY(), this.dropY, this.blocked, t);
     }
