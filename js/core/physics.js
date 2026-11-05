@@ -4,12 +4,19 @@
 //  detección de fusiones e impactos. Mundo lógico 720×1080.
 // ============================================================
 
-import { CONFIG } from '../config.js?v=15';
+import { CONFIG } from '../config.js?v=18';
 
 const { Engine, Bodies, Body, Composite, Events, Sleeping } = Matter;
 
 // Velocidad relativa mínima (px/step) para considerar "impacto" sonoro/visual
 const IMPACT_SPEED = 2.5;
+
+// Reposo (ahorro de batería): una fruta solo se duerme tras ~2 s seguidos casi
+// inmóvil (Matter cuenta en pasos de 16.7 ms: 120 ≈ 2 s; por defecto 60 ≈ 1 s).
+// Una fruta que cae acelera con la gravedad, así que nunca cumple la condición.
+// Toda alta o baja de fruta despierta a las demás: ninguna queda flotando
+// cuando desaparece la que tenía debajo.
+const SLEEP_THRESHOLD = 120;
 
 // ------------------------------------------------------------
 //  Geometría PURA del tarro, derivada de CONFIG
@@ -40,7 +47,7 @@ export class PhysicsEngine {
   constructor() {
     const P = CONFIG.physics;
 
-    this.engine = Engine.create();
+    this.engine = Engine.create({ enableSleeping: true });
     this.engine.gravity.y = P.gravityY;
     this.engine.gravity.scale = 0.001; // escala por defecto de Matter
     this.engine.positionIterations = 10;
@@ -115,6 +122,7 @@ export class PhysicsEngine {
       frictionAir: P.frictionAir,
       density: P.density,
       slop: P.slop,
+      sleepThreshold: SLEEP_THRESHOLD,
     });
     if (!body.plugin) body.plugin = {};
     body.plugin.fruit = fruit;
@@ -122,6 +130,7 @@ export class PhysicsEngine {
     this._fruits.add(fruit);
     this._surfaceDirty = true;
     Composite.add(this.engine.world, body);
+    this.wakeAll();
     return body;
   }
 
@@ -130,6 +139,7 @@ export class PhysicsEngine {
     Composite.remove(this.engine.world, fruit.body);
     this._fruits.delete(fruit);
     fruit.body = null;
+    this.wakeAll(); // las de encima deben caer al hueco
   }
 
   // Elimina TODAS las frutas; las paredes permanecen.

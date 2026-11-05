@@ -4,7 +4,7 @@
 //  Música ambiental premium + SFX jugosos, todo sintetizado.
 // ============================================================
 
-import { CONFIG } from '../config.js?v=15';
+import { CONFIG } from '../config.js?v=18';
 
 // ----- utilidades -----
 function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
@@ -24,6 +24,7 @@ export const Sound = {
   noiseBuf: null,
   initialized: false,
   _muted: false,
+  _paused: false,     // pausa del sistema: partida en pausa o pestaña oculta
   _musicWanted: false,
   _music: null,       // { bus, nodes[], state }
   _warnTimer: 0,
@@ -33,9 +34,16 @@ export const Sound = {
 
   get isMuted() { return this._muted; },
 
+  // silencio del jugador o pausa del sistema: en ambos se suspende el contexto
+  _silent() { return this._muted || this._paused; },
+
   // ----- init perezoso y seguro (primer gesto del usuario) -----
   init() {
-    if (this.initialized) return;
+    if (this.initialized) {
+      // reintento en un gesto: iOS puede negar resume() fuera de uno
+      if (!this._silent() && this.ctx.state !== 'running') this._syncAudio();
+      return;
+    }
     try {
       const AC = (typeof window !== 'undefined')
         && (window.AudioContext || window.webkitAudioContext);
@@ -87,12 +95,21 @@ export const Sound = {
     return this._syncAudio();
   },
 
+  // Pausa del sistema: suspende el hardware de audio sin tocar la preferencia
+  // de sonido del jugador (ni el volumen de la música)
+  setPaused(p) {
+    const v = !!p;
+    if (v === this._paused) return Promise.resolve();
+    this._paused = v;
+    return this._syncAudio();
+  },
+
   // Suspender también detiene el hardware y el reloj de WebAudio. Las notas
   // efímeras se cancelan para que no reaparezcan al volver a activar el sonido.
   _syncAudio() {
     if (!this.initialized || this.ctx.state === 'closed') return Promise.resolve();
     const ctx = this.ctx;
-    if (this._muted) {
+    if (this._silent()) {
       if (this._music) {
         if (!this._mutedMusicClock) {
           this._mutedMusicClock = { audio: ctx.currentTime, wall: performance.now() };
@@ -114,7 +131,7 @@ export const Sound = {
     // La petición de resume sale en el gesto del usuario. Comprobar el estado
     // al resolver impide reabrir timers tras una secuencia rápida de toggles.
     return ctx.resume().then(() => {
-      if (this._muted || this.ctx !== ctx || ctx.state !== 'running') return;
+      if (this._silent() || this.ctx !== ctx || ctx.state !== 'running') return;
       if (this._music && this._mutedMusicClock) {
         const clock = this._mutedMusicClock;
         const virtualNow = clock.audio + (performance.now() - clock.wall) / 1000;
@@ -214,7 +231,7 @@ export const Sound = {
 
   startMusic() {
     this._musicWanted = true;
-    if (!this.initialized || this._muted || this._music) return;
+    if (!this.initialized || this._silent() || this._music) return;
     const ctx = this.ctx;
 
     // bus con delay-feedback suave para espacialidad
@@ -270,14 +287,14 @@ export const Sound = {
   },
 
   _resumeMusic() {
-    if (!this._music || this._muted || this._music.state.timer) return;
+    if (!this._music || this._silent() || this._music.state.timer) return;
     const { state, bus } = this._music;
     state.timer = setInterval(() => this._schedule(state, bus), 100);
     this._schedule(state, bus);
   },
 
   _schedule(state, bus) {
-    if (!this._music || !this.initialized || this._muted) return;
+    if (!this._music || !this.initialized || this._silent()) return;
     const ahead = this._now() + 0.35;
     while (state.next < ahead) {
       const s = state.step % 16;
@@ -448,7 +465,7 @@ export const Sound = {
   warn(on) {
     this._warnWanted = !!on;
     if (on) {
-      if (!this.initialized || this._muted || this._warnTimer) return;
+      if (!this.initialized || this._silent() || this._warnTimer) return;
       this._heartbeat();
       this._warnTimer = setInterval(() => this._heartbeat(), 600);
     } else if (this._warnTimer) {

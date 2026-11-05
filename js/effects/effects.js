@@ -4,7 +4,7 @@
 //  y flash a pantalla. Mundo lógico 720×1080.
 // ============================================================
 
-import { CONFIG, STR } from '../config.js?v=15';
+import { CONFIG, STR } from '../config.js?v=18';
 
 const TAU = Math.PI * 2;
 const FONT = '"Baloo 2","Nunito",system-ui,sans-serif';
@@ -98,6 +98,12 @@ export class EffectsManager {
   // permite a quien llama (y al chip de combo) ceder el protagonismo
   get activeGoldenMsLeft() {
     return this.golden ? this.golden.life - this.golden.t : 0;
+  }
+
+  // sin sacudida ni textos/banners/destellos en curso
+  get isIdle() {
+    return this.trauma === 0 && this.popups.length === 0 &&
+      !this.combo && !this.golden && !this.flashFx;
   }
 
   // ----- API de efectos -----

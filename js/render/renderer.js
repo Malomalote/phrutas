@@ -6,12 +6,14 @@
 //  lo aplica main.js con su transform.
 // ============================================================
 
-import { jarGeometry, dangerY } from '../core/physics.js?v=15';
-import { fruitTexture, drawFruitTexture, MARGEN } from './textures.js?v=15';
-import { CONFIG } from '../config.js?v=15';
+import { jarGeometry, dangerY } from '../core/physics.js?v=18';
+import { fruitTexture, drawFruitTexture, MARGEN } from './textures.js?v=18';
+import { CONFIG } from '../config.js?v=18';
 
 const TAU = Math.PI * 2;
 const POP_MS = 260; // duración del pop-in de nacimiento
+const DANGER_PAD = 30; // margen (lógico) del sprite de brillo de la línea roja
+const byY = (a, b) => (a.y || 0) - (b.y || 0);
 
 // ── RNG determinista para estrellas y burbujas ──
 function mulberry32(seed) {
@@ -116,6 +118,9 @@ export class SceneRenderer {
     this._stars = null;
     this._bubbles = null;
     this._jarFrontCache = null;
+    this._backdrop = null;
+    this._dangerCache = null;
+    this._orden = []; // reutilizado por drawFruits (sin basura por fotograma)
     this.softenWobble = 0; // ondulación del cristal durante el amasado (0..1)
   }
 
@@ -124,8 +129,46 @@ export class SceneRenderer {
     this.softenWobble = clamp01(v || 0);
   }
 
-  // ── Fondo nocturno violeta en todo el lienzo lógico ──
-  drawBackground(ctx, t) {
+  // ── Fondo: cielo y vidrio trasero horneados (solo cambian al redimensionar)
+  //    con las estrellas, que sí parpadean, pintadas en vivo entre ambos.
+  //    Los degradados a pantalla completa eran lo más caro de cada fotograma.
+  drawBackdrop(ctx, t) {
+    const width = this.canvas.width;
+    const worldWidth = CONFIG.world.width;
+    const scale = width / worldWidth;
+    const g = jarGeometry();
+    const key = `${width}x${this.canvas.height}:${worldWidth}x${CONFIG.world.height}:` +
+      `${g.left},${g.right},${g.top},${g.bottom}`;
+    let cache = this._backdrop;
+    if (!cache || cache.key !== key) {
+      const sky = this._bakeLayer(cache && cache.sky, 0, 0,
+        worldWidth, CONFIG.world.height, scale, (c) => this._paintSky(c));
+      const jar = this._bakeLayer(cache && cache.jar, g.left, g.top,
+        g.right - g.left, g.bottom - g.top, scale, (c) => this.drawJarBack(c, 0)); // t=0: brillo del cono en su valor medio
+      cache = { key, sky, jar, g };
+      this._backdrop = cache;
+    }
+    ctx.drawImage(cache.sky, 0, 0, cache.sky.width / scale, cache.sky.height / scale);
+    this._drawStars(ctx, t);
+    ctx.drawImage(cache.jar, cache.g.left, cache.g.top,
+      cache.jar.width / scale, cache.jar.height / scale);
+  }
+
+  // Lienzo a resolución real que cubre el rectángulo lógico (x, y, w, h)
+  _bakeLayer(prev, x, y, w, h, scale, paint) {
+    const cv = prev || document.createElement('canvas');
+    cv.width = Math.ceil(w * scale);
+    cv.height = Math.ceil(h * scale);
+    const c = cv.getContext('2d');
+    c.setTransform(scale, 0, 0, scale, -x * scale, -y * scale);
+    paint(c);
+    return cv;
+  }
+
+  // ── Cielo nocturno violeta en todo el lienzo lógico ──
+  // (los resplandores se hornean en su valor medio: su "respiración" de
+  // ±0.02 de alpha en ~30 s no se apreciaba)
+  _paintSky(ctx) {
     const W = CONFIG.world.width;
     const H = CONFIG.world.height;
 
@@ -137,23 +180,25 @@ export class SceneRenderer {
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
 
-    // resplandor frambuesa que respira
-    const a1 = 0.045 + 0.02 * Math.sin(t * 0.00021);
+    // resplandor frambuesa
+    const a1 = 0.045;
     g = ctx.createRadialGradient(W * 0.2, H * 0.24, 0, W * 0.2, H * 0.24, W * 0.55);
     g.addColorStop(0, `rgba(255,90,150,${a1})`);
     g.addColorStop(1, 'rgba(255,90,150,0)');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
 
-    // resplandor azul, desfasado
-    const a2 = 0.05 + 0.015 * Math.sin(t * 0.00016 + 2.1);
+    // resplandor azul
+    const a2 = 0.05;
     g = ctx.createRadialGradient(W * 0.82, H * 0.72, 0, W * 0.82, H * 0.72, W * 0.6);
     g.addColorStop(0, `rgba(80,120,255,${a2})`);
     g.addColorStop(1, 'rgba(80,120,255,0)');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
+  }
 
-    // polvo de estrellas: 60 motas fijas con parpadeo sinusoidal lento
+  // polvo de estrellas: 60 motas fijas con parpadeo sinusoidal lento
+  _drawStars(ctx, t) {
     this._ensureStars();
     for (const s of this._stars) {
       const tw = 0.5 + 0.5 * Math.sin(t * s.sp + s.ph);
@@ -249,51 +294,22 @@ export class SceneRenderer {
     ctx.restore();
   }
 
-  // ── Frutas vivas: sombra, pop-in, squash/wobble y halo dorado ──
+  // ── Frutas vivas: pop-in, squash/wobble y halo dorado ──
+  // (sin sombras de suelo/contacto: casi negras sobre la noche violeta no se
+  // distinguían y costaban dos gradientes por fruta y fotograma)
   drawFruits(ctx, fruits, t) {
     if (!fruits || !fruits.length) return;
-    const g0 = jarGeometry();
-    const floorY = g0.bottom;
-    const span = Math.max(1, floorY - g0.top);
 
     // pintar de arriba hacia abajo: las bajas quedan delante
-    const orden = [...fruits].sort((a, b) => (a.y || 0) - (b.y || 0));
-
-    // sombras de contacto: ¿hay otra fruta viva justo debajo? (O(n²), barato)
-    const vivas = orden.filter((f) => f && f.alive !== false);
-    const conContacto = new Set();
-    for (let i = 0; i < vivas.length; i++) {
-      const a = vivas[i];
-      for (let j = 0; j < vivas.length; j++) {
-        if (i === j) continue;
-        const b = vivas[j];
-        const dy = (b.y || 0) - (a.y || 0);
-        const dx = Math.abs((b.x || 0) - (a.x || 0));
-        if (dy > 0 && dx < (a.radius || 0) + (b.radius || 0) * 0.8) {
-          conContacto.add(a);
-          break;
-        }
-      }
-    }
+    const orden = this._orden;
+    orden.length = 0;
+    for (const f of fruits) if (f && f.alive !== false) orden.push(f);
+    orden.sort(byY);
 
     for (const fr of orden) {
-      if (!fr || fr.alive === false) continue;
       const R = fr.radius || 20;
       const x = fr.x || 0;
       const y = fr.y || 0;
-
-      // altura sobre el suelo (0 = en el suelo, 1 = arriba del todo)
-      const h01 = clamp01((floorY - (y + R)) / span);
-
-      // sombra proyectada en el suelo: más pequeña y nítida cerca del suelo
-      const shR = R * (0.7 + 0.55 * h01);
-      const shA = 0.28 * (1 - 0.55 * h01);
-      softEllipse(ctx, x, floorY - 2, shR, Math.max(3, shR * 0.22), '#070312', shA);
-
-      // media luna de oclusión donde otra fruta se apoya debajo
-      if (conContacto.has(fr)) {
-        softEllipse(ctx, x, y + R * 0.75, R * 0.85, R * 0.2, '#0a0519', 0.22);
-      }
 
       // halo pulsante de las doradas
       if (fr.golden) {
@@ -329,6 +345,7 @@ export class SceneRenderer {
       drawFruitTexture(ctx, tex, -half, -half, half * 2, half * 2);
       ctx.restore();
     }
+    orden.length = 0; // no retener frutas muertas hasta el siguiente fotograma
   }
 
   // ── Fruta apuntando + guía de caída + marcador de aterrizaje ──
@@ -625,28 +642,31 @@ export class SceneRenderer {
     const x1 = g0.right - 8;
     const p = clamp01(pulse01);
 
+    // shadowBlur es de lo más caro del canvas 2D: los brillos se hornean una
+    // vez en sprites y aquí solo se componen
+    const sp = this._dangerSprites(x0, x1);
+    const pw = x1 - x0 + DANGER_PAD * 2;
+    const ph = DANGER_PAD * 2;
+
     ctx.save();
     ctx.lineCap = 'round';
 
-    // base roja continua permanente con glow suave
-    ctx.shadowColor = 'rgba(255,60,80,0.7)';
-    ctx.shadowBlur = 6;
-    ctx.strokeStyle = 'rgba(255,90,110,0.35)';
-    ctx.lineWidth = 2;
+    // base roja continua permanente con glow suave (sprite fijo)
+    ctx.drawImage(sp.base, x0 - DANGER_PAD, y - DANGER_PAD, pw, ph);
+
+    // guiones rojos encima: el pulso sube el glow y la intensidad
+    ctx.globalAlpha = 0.45 + 0.55 * p;
+    ctx.drawImage(sp.glow, x0 - DANGER_PAD, y - DANGER_PAD, pw, ph);
+    ctx.globalAlpha = 1;
+    ctx.setLineDash([16, 12]);
+    ctx.lineDashOffset = -((t * 0.012) % 28);
+    ctx.strokeStyle = `rgba(255,90,110,${0.65 + 0.35 * p})`;
+    ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.moveTo(x0, y);
     ctx.lineTo(x1, y);
     ctx.stroke();
-
-    // guiones rojos encima: el pulso sube el glow y la intensidad
-    ctx.setLineDash([16, 12]);
-    ctx.lineDashOffset = -((t * 0.012) % 28);
-    ctx.shadowBlur = 8 + 16 * p;
-    ctx.strokeStyle = `rgba(255,90,110,${0.65 + 0.35 * p})`;
-    ctx.lineWidth = 3;
-    ctx.stroke();
     ctx.setLineDash([]);
-    ctx.shadowBlur = 0;
 
     // escuadras rojas en los extremos
     const s = 9;
@@ -663,6 +683,54 @@ export class SceneRenderer {
       ctx.stroke();
     }
     ctx.restore();
+  }
+
+  // Sprites de la línea roja (a resolución real, se rehacen al redimensionar):
+  //  base → línea fina con su glow; glow → solo el halo de los guiones
+  //  (dibujado fuera del lienzo y traído con shadowOffset: sombra sin trazo)
+  _dangerSprites(x0, x1) {
+    const scale = this.canvas.width / CONFIG.world.width;
+    const c = this._dangerCache;
+    if (c && c.x0 === x0 && c.x1 === x1 && c.scale === scale) return c;
+
+    const w = x1 - x0 + DANGER_PAD * 2;
+    const h = DANGER_PAD * 2;
+    const make = (prev, paint) => {
+      const cv = prev || document.createElement('canvas');
+      cv.width = Math.ceil(w * scale);
+      cv.height = Math.ceil(h * scale);
+      const lctx = cv.getContext('2d');
+      lctx.setTransform(scale, 0, 0, scale, 0, 0);
+      lctx.lineCap = 'round';
+      paint(lctx);
+      return cv;
+    };
+    const paintBase = (lctx) => {
+      lctx.shadowColor = 'rgba(255,60,80,0.7)';
+      lctx.shadowBlur = 6;
+      lctx.strokeStyle = 'rgba(255,90,110,0.35)';
+      lctx.lineWidth = 2;
+      lctx.beginPath();
+      lctx.moveTo(DANGER_PAD, DANGER_PAD);
+      lctx.lineTo(w - DANGER_PAD, DANGER_PAD);
+      lctx.stroke();
+    };
+    const paintGlow = (lctx) => {
+      const off = h * 2; // trazo fuera del sprite; solo su sombra cae dentro
+      lctx.shadowColor = 'rgba(255,60,80,0.7)';
+      lctx.shadowBlur = 20;
+      lctx.shadowOffsetY = off * scale; // la sombra no sigue al transform
+      lctx.strokeStyle = 'rgba(255,90,110,1)';
+      lctx.lineWidth = 3;
+      lctx.beginPath();
+      lctx.moveTo(DANGER_PAD, DANGER_PAD - off);
+      lctx.lineTo(w - DANGER_PAD, DANGER_PAD - off);
+      lctx.stroke();
+    };
+    const base = make(c && c.base, paintBase);
+    const glow = make(c && c.glow, paintGlow);
+    this._dangerCache = { x0, x1, scale, base, glow };
+    return this._dangerCache;
   }
 
   // ── Aura de "amasar": velo menta + burbujas de gelatina ──

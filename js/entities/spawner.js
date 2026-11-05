@@ -3,7 +3,7 @@
 //  con anti-racha: nunca 3 tiradas iguales seguidas (1 re-tiro).
 // ============================================================
 
-import { CONFIG } from '../config.js?v=15';
+import { CONFIG } from '../config.js?v=18';
 
 export class Spawner {
   constructor() {
