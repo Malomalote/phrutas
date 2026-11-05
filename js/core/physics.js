@@ -4,7 +4,7 @@
 //  detección de fusiones e impactos. Mundo lógico 720×1080.
 // ============================================================
 
-import { CONFIG } from '../config.js?v=18';
+import { CONFIG } from '../config.js?v=19';
 
 const { Engine, Bodies, Body, Composite, Events, Sleeping } = Matter;
 
@@ -102,12 +102,33 @@ export class PhysicsEngine {
     ];
   }
 
-  // Recolocar paredes cuando main.js redimensiona las bandas del mundo
-  rebuildWalls() {
+  // Recolocar paredes cuando main.js redimensiona las bandas del mundo.
+  // Con prev (geometría anterior) las frutas viajan con el tarro: si no,
+  // al girar el móvil quedaban fuera de las paredes nuevas y caían al vacío.
+  rebuildWalls(prev) {
     for (const w of this.walls) Composite.remove(this.engine.world, w);
     this.walls = this._buildWalls();
     Composite.add(this.engine.world, this.walls);
+    if (prev) this._relocateFruits(prev, jarGeometry());
     this.wakeAll();
+  }
+
+  // Misma altura sobre el suelo y misma posición relativa entre paredes.
+  // Si el tarro se estrecha, los solapes los resuelve el propio motor.
+  _relocateFruits(prev, g) {
+    if (prev.left === g.left && prev.right === g.right && prev.bottom === g.bottom) return;
+    const sx = (g.right - g.left) / Math.max(1, prev.right - prev.left);
+    for (const fruit of this._fruits) {
+      const b = fruit.body;
+      if (!b) continue;
+      const r = fruit.radius;
+      const x = Math.min(g.right - r, Math.max(g.left + r,
+        g.left + (b.position.x - prev.left) * sx));
+      const y = Math.min(g.bottom - r, g.bottom - (prev.bottom - b.position.y));
+      Body.setPosition(b, { x, y });
+      fruit.x = x;
+      fruit.y = y;
+    }
   }
 
   addFruit(fruit) {
