@@ -5,7 +5,7 @@
 //  oclusión ambiental, doble especular, grano y decorado propio.
 // ============================================================
 
-import { CONFIG } from '../config.js?v=18';
+import { CONFIG } from '../config.js?v=19';
 
 const TAU = Math.PI * 2;
 // Lado virtual del sprite = diámetro × 2.36. drawFruitTexture conserva ese

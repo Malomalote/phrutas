@@ -4,7 +4,7 @@
 //  aquí solo se integra el "cuerpo blando" visual (60 fps+ estable).
 // ============================================================
 
-import { CONFIG, escalaFrutas } from '../config.js?v=18';
+import { CONFIG, escalaFrutas } from '../config.js?v=19';
 
 const K = 180;            // rigidez del muelle (1/s^2)
 const DAMP = 12;          // amortiguación (1/s)  => subamortiguado, rebota

@@ -2,9 +2,10 @@
 //  SANDÍA JELLY · Arranque, escalado, entrada y bucle principal
 // ============================================================
 
-import { CONFIG, migrarRecordLegacy } from './config.js?v=18';
-import { Game } from './core/game.js?v=18';
-import { Sound } from './audio/sound.js?v=18';
+import { CONFIG, migrarRecordLegacy } from './config.js?v=19';
+import { Game } from './core/game.js?v=19';
+import { jarGeometry } from './core/physics.js?v=19';
+import { Sound } from './audio/sound.js?v=19';
 
 const stage = document.getElementById('stage');
 const canvas = document.getElementById('game-canvas');
@@ -13,6 +14,7 @@ const canvas = document.getElementById('game-canvas');
 let viewScale = 1;
 
 function resize() {
+  const prevJar = jarGeometry(); // para trasladar las frutas con el tarro
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   const ratio = vh / vw;
@@ -61,7 +63,7 @@ function resize() {
   CONFIG.jar.topMargin = Math.min(320, Math.max(110, hudLogical));
   CONFIG.jar.bottomMargin = Math.min(320, Math.max(100, bottomLogical));
   if (window.__game) {
-    window.__game.physics.rebuildWalls();
+    window.__game.relayout(prevJar);
     wakeLoop(); // redimensionar borra el canvas: repintar aunque el bucle duerma
   }
 }

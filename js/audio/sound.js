@@ -4,7 +4,7 @@
 //  Música ambiental premium + SFX jugosos, todo sintetizado.
 // ============================================================
 
-import { CONFIG } from '../config.js?v=18';
+import { CONFIG } from '../config.js?v=19';
 
 // ----- utilidades -----
 function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }

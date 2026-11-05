@@ -3,17 +3,17 @@
 //  Máquina de estados, fusiones, energía, combos y peligro.
 // ============================================================
 
-import { CONFIG, STR, TIME, DIFICULTADES, escalaFrutas, recordDe, guardarRecordDe, fijarEscalaFrutas } from '../config.js?v=18';
-import { PhysicsEngine, jarGeometry, dangerY } from './physics.js?v=18';
-import { Fruit } from '../entities/fruit.js?v=18';
-import { Spawner } from '../entities/spawner.js?v=18';
-import { buildTextures } from '../render/textures.js?v=18';
-import { SceneRenderer } from '../render/renderer.js?v=18';
-import { ParticleSystem } from '../effects/particles.js?v=18';
-import { EffectsManager } from '../effects/effects.js?v=18';
-import { Sound } from '../audio/sound.js?v=18';
-import { HUD } from '../ui/hud.js?v=18';
-import { Overlays } from '../ui/overlays.js?v=18';
+import { CONFIG, STR, TIME, DIFICULTADES, escalaFrutas, recordDe, guardarRecordDe, fijarEscalaFrutas } from '../config.js?v=19';
+import { PhysicsEngine, jarGeometry, dangerY } from './physics.js?v=19';
+import { Fruit } from '../entities/fruit.js?v=19';
+import { Spawner } from '../entities/spawner.js?v=19';
+import { buildTextures } from '../render/textures.js?v=19';
+import { SceneRenderer } from '../render/renderer.js?v=19';
+import { ParticleSystem } from '../effects/particles.js?v=19';
+import { EffectsManager } from '../effects/effects.js?v=19';
+import { Sound } from '../audio/sound.js?v=19';
+import { HUD } from '../ui/hud.js?v=19';
+import { Overlays } from '../ui/overlays.js?v=19';
 
 const JAR = new Proxy({}, {
   // geometría SIEMPRE viva: main.js ajusta las bandas al redimensionar
@@ -192,6 +192,15 @@ export class Game {
     this.physics.addFruit(f);
     this.fruits.push(f);
     return f;
+  }
+
+  // ---------- Redimensionado ----------
+  // main.js avisa tras recalcular el mundo: paredes nuevas, frutas y punto
+  // de mira trasladados con el tarro (prev = geometría anterior)
+  relayout(prev) {
+    this.physics.rebuildWalls(prev);
+    const sx = (JAR.right - JAR.left) / Math.max(1, prev.right - prev.left);
+    this.setAim(JAR.left + (this.aimX - prev.left) * sx);
   }
 
   // ---------- Entrada ----------
