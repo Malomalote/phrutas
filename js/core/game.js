@@ -3,17 +3,17 @@
 //  Máquina de estados, fusiones, energía, combos y peligro.
 // ============================================================
 
-import { CONFIG, STR, TIME, DIFICULTADES, escalaFrutas, recordDe, guardarRecordDe, fijarEscalaFrutas } from '../config.js?v=15';
-import { PhysicsEngine, jarGeometry, dangerY } from './physics.js?v=15';
-import { Fruit } from '../entities/fruit.js?v=15';
-import { Spawner } from '../entities/spawner.js?v=15';
-import { buildTextures } from '../render/textures.js?v=15';
-import { SceneRenderer } from '../render/renderer.js?v=15';
-import { ParticleSystem } from '../effects/particles.js?v=15';
-import { EffectsManager } from '../effects/effects.js?v=15';
-import { Sound } from '../audio/sound.js?v=15';
-import { HUD } from '../ui/hud.js?v=15';
-import { Overlays } from '../ui/overlays.js?v=15';
+import { CONFIG, STR, TIME, DIFICULTADES, escalaFrutas, recordDe, guardarRecordDe, fijarEscalaFrutas } from '../config.js?v=18';
+import { PhysicsEngine, jarGeometry, dangerY } from './physics.js?v=18';
+import { Fruit } from '../entities/fruit.js?v=18';
+import { Spawner } from '../entities/spawner.js?v=18';
+import { buildTextures } from '../render/textures.js?v=18';
+import { SceneRenderer } from '../render/renderer.js?v=18';
+import { ParticleSystem } from '../effects/particles.js?v=18';
+import { EffectsManager } from '../effects/effects.js?v=18';
+import { Sound } from '../audio/sound.js?v=18';
+import { HUD } from '../ui/hud.js?v=18';
+import { Overlays } from '../ui/overlays.js?v=18';
 
 const JAR = new Proxy({}, {
   // geometría SIEMPRE viva: main.js ajusta las bandas al redimensionar
@@ -43,6 +43,7 @@ export class Game {
 
     this.fruits = [];
     this._fruitsDirty = false;
+    this.onStateChange = null; // main.js: despertar el bucle y pausar el audio
     this.state = 'menu';
     this.score = 0;
     this.dificultad = DIFICULTADES[2]; // Media por defecto
@@ -79,6 +80,22 @@ export class Game {
     this._wireCallbacks();
     this.hud.setBest(this.best);
     this.hud.setNext(this.spawner.next);
+  }
+
+  // ---------- Estado ----------
+  get state() { return this._state; }
+  set state(v) {
+    if (v === this._state) return;
+    this._state = v;
+    if (this.onStateChange) this.onStateChange(v);
+  }
+
+  // Escena quieta: sin simulación ni efectos pendientes. main.js deja de
+  // redibujar mientras se cumpla (menú, pausa y fin de partida).
+  get isIdle() {
+    const s = this._state;
+    if (s !== 'menu' && s !== 'paused' && s !== 'gameover') return false;
+    return this.particles.isEmpty && this.effects.isIdle;
   }
 
   // ---------- Cableado de módulos ----------
@@ -540,6 +557,7 @@ export class Game {
           this.physics.setSoften(false);
         } else if (now() - this._softenJiggleAt > 190) {
           this._softenJiggleAt = now();
+          this.physics.wakeAll(); // setVelocity no despierta un cuerpo dormido
           for (const f of this.fruits) {
             if (!f.alive) continue;
             const ph = Math.sin(f.x * 0.05 + now() * 0.004);
@@ -621,8 +639,7 @@ export class Game {
     ctx.save();
     ctx.translate(this.effects.offsetX, this.effects.offsetY);
 
-    this.renderer.drawBackground(ctx, t);
-    this.renderer.drawJarBack(ctx, t);
+    this.renderer.drawBackdrop(ctx, t);
     this.renderer.drawFruits(ctx, this.fruits, t);
     if (this.state === 'playing' && this.dropCd < CONFIG.spawn.dropCooldown * 0.55) {
       this.renderer.drawAim(ctx, this.spawner.current, this.aimX, aimY(), this.dropY, this.blocked, t);

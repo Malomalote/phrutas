@@ -2,9 +2,9 @@
 //  SANDÍA JELLY · Arranque, escalado, entrada y bucle principal
 // ============================================================
 
-import { CONFIG, migrarRecordLegacy } from './config.js?v=15';
-import { Game } from './core/game.js?v=15';
-import { Sound } from './audio/sound.js?v=15';
+import { CONFIG, migrarRecordLegacy } from './config.js?v=18';
+import { Game } from './core/game.js?v=18';
+import { Sound } from './audio/sound.js?v=18';
 
 const stage = document.getElementById('stage');
 const canvas = document.getElementById('game-canvas');
@@ -43,7 +43,9 @@ function resize() {
   stage.style.width = w + 'px';
   stage.style.height = h + 'px';
 
-  const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  // tope 2×: los sprites ya vienen supermuestreados y por encima no se aprecia
+  // diferencia, pero cada píxel extra se borra y repinta en cada fotograma
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
   canvas.width = Math.round(w * dpr);
   canvas.height = Math.round(h * dpr);
   canvas.style.width = w + 'px';
@@ -58,7 +60,10 @@ function resize() {
   const bottomLogical = (bottom ? bottom.offsetHeight : 90) / s + 26;
   CONFIG.jar.topMargin = Math.min(320, Math.max(110, hudLogical));
   CONFIG.jar.bottomMargin = Math.min(320, Math.max(100, bottomLogical));
-  if (window.__game) window.__game.physics.rebuildWalls();
+  if (window.__game) {
+    window.__game.physics.rebuildWalls();
+    wakeLoop(); // redimensionar borra el canvas: repintar aunque el bucle duerma
+  }
 }
 window.addEventListener('resize', resize);
 window.addEventListener('orientationchange', () => setTimeout(resize, 250));
@@ -155,21 +160,51 @@ window.addEventListener('keyup', (e) => {
   if (e.key === 'e' || e.key === 'E') game.setTilt(1, false);
 });
 
+// El audio se suspende en pausa y con la pestaña oculta (en cualquier estado)
+const syncAudioPause = () => Sound.setPaused(document.hidden || game.state === 'paused');
+
+game.onStateChange = (state) => {
+  document.body.dataset.estado = state; // el CSS pausa animaciones decorativas
+  syncAudioPause();
+  wakeLoop();
+};
+document.body.dataset.estado = game.state;
+
 // Pausa educada al cambiar de pestaña
 document.addEventListener('visibilitychange', () => {
   if (document.hidden && game.state === 'playing') game.togglePause();
+  syncAudioPause();
 });
 
 // ---------- Bucle principal ----------
+// Tope de ~60 fps: en pantallas de 90/120 Hz se saltan fotogramas de rAF.
+// Con la escena quieta (game.isIdle) el bucle se duerme tras pintar el último
+// fotograma; wakeLoop() lo reanuda al cambiar de estado o redimensionar.
+const FRAME_MS = 1000 / 60;
 let last = performance.now();
+let nextAt = 0;
+let rafId = 0;
 
 function frame(t) {
-  requestAnimationFrame(frame);
-  const dt = Math.min(50, t - last); // clamp anti-espiral tras pestañas en segundo plano
+  rafId = 0;
+  if (t < nextAt - 2) { // margen para el jitter de 60 Hz
+    rafId = requestAnimationFrame(frame);
+    return;
+  }
+  nextAt = t - nextAt > FRAME_MS ? t + FRAME_MS : nextAt + FRAME_MS;
+  const dt = Math.max(0, Math.min(50, t - last)); // clamp anti-espiral tras pestañas en segundo plano
   last = t;
 
   game.update(dt);
   game.render();
+  if (!game.isIdle) rafId = requestAnimationFrame(frame);
 }
 
-requestAnimationFrame(frame);
+function wakeLoop() {
+  if (rafId) return;
+  last = performance.now();
+  nextAt = 0;
+  rafId = requestAnimationFrame(frame);
+}
+
+wakeLoop();

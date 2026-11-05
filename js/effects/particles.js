@@ -66,6 +66,33 @@ function hsl(h, s, l) {
   return `hsl(${h.toFixed(0)}, ${clamp(s, 0, 100).toFixed(0)}%, ${clamp(l, 0, 100).toFixed(0)}%)`;
 }
 
+// ----- brillo del zumo horneado: sustituye a shadowBlur por gota -----
+// Un sprite por color base de explosión (uno por fruta, no por gota): disco
+// del color con halo difuso que se desvanece hasta el borde.
+const GLOW_PX = 64;
+const GLOW_HALO = 7;   // px reales de halo, como el shadowBlur original
+const glowCache = new Map();
+
+function glowSprite(h, s, l) {
+  const key = `${h | 0},${s | 0},${l | 0}`;
+  let cv = glowCache.get(key);
+  if (cv) return cv;
+  cv = document.createElement('canvas');
+  cv.width = cv.height = GLOW_PX;
+  const g = cv.getContext('2d');
+  const c = GLOW_PX / 2;
+  const col = (a) => `hsla(${h | 0}, ${clamp(s, 0, 100) | 0}%, ${clamp(l, 0, 100) | 0}%, ${a})`;
+  const grad = g.createRadialGradient(c, c, 0, c, c, c);
+  grad.addColorStop(0, col(1));
+  grad.addColorStop(0.35, col(1));
+  grad.addColorStop(0.6, col(0.35));
+  grad.addColorStop(1, col(0));
+  g.fillStyle = grad;
+  g.fillRect(0, 0, GLOW_PX, GLOW_PX);
+  glowCache.set(key, cv);
+  return cv;
+}
+
 // Fábrica de partícula: forma plana estable (hidden class compartida)
 function blank() {
   return {
@@ -75,7 +102,7 @@ function blank() {
     rot: 0, vr: 0,
     size: 0, size1: 0,
     a0: 1, stretch: 0,
-    fill: '#ffffff', rgb: '255,255,255',
+    fill: '#ffffff', rgb: '255,255,255', glow: null,
     seed: 0, tw: 0,
     r0: 0, r1: 0, w: 0,
     nv: 0, va: new Float32Array(5), vrad: new Float32Array(5),
@@ -88,6 +115,10 @@ export class ParticleSystem {
     this._live = [];
     this._free = new Array(MAX);
     for (let i = 0; i < MAX; i++) this._free[i] = blank();
+  }
+
+  get isEmpty() {
+    return this._live.length === 0;
   }
 
   // ----- pool -----
@@ -123,11 +154,13 @@ export class ParticleSystem {
       l = clamp(l, 55, 70);
     }
 
+    const glow = glowSprite(h, s, l);
     const n = randInt(16, 24);
     for (let i = 0; i < n; i++) {
       const p = this._spawn();
       if (!p) break;
       p.kind = Math.random() < 0.3 ? K_TEARDROP : K_DROP;
+      p.glow = glow;
       p.layer = LAYER_BACK;
       p.x = x + rand(-radius * 0.3, radius * 0.3);
       p.y = y + rand(-radius * 0.3, radius * 0.3);
@@ -399,24 +432,27 @@ export class ParticleSystem {
         default: break;
       }
     }
-    // pase de brillo del zumo: 'lighter' + shadowBlur SOLO aquí
+    // pase de brillo del zumo: 'lighter' + sprite horneado (antes shadowBlur
+    // por gota, una pasada de desenfoque cada una)
+    let saved = false;
+    let halo = 0;
     for (let i = 0; i < live.length; i++) {
       const p = live[i];
       if (p.layer !== LAYER_BACK) continue;
       if (p.kind !== K_DROP && p.kind !== K_TEARDROP) continue;
+      if (!p.glow) continue;
+      if (!saved) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        halo = GLOW_HALO / (ctx.getTransform().a || 1); // px reales → lógicos
+        saved = true;
+      }
       const q = p.t / p.life;
-      const s = p.size + (p.size1 - p.size) * q;
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
+      const e = p.size + (p.size1 - p.size) * q + halo;
       ctx.globalAlpha = p.a0 * (1 - q) * 0.35;
-      ctx.shadowColor = p.fill;
-      ctx.shadowBlur = 7; // glow suave 6-8
-      ctx.fillStyle = p.fill;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, s, 0, TAU);
-      ctx.fill();
-      ctx.restore();
+      ctx.drawImage(p.glow, p.x - e, p.y - e, e * 2, e * 2);
     }
+    if (saved) ctx.restore();
   }
 
   // ----- render: sparkles y confetis (sobre el cristal) -----

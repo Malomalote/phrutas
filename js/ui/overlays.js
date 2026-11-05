@@ -3,8 +3,8 @@
 //  Construye el contenido de #overlay (el CSS hace el vidrio y el blur).
 // ============================================================
 
-import { CONFIG, STR, DIFICULTADES } from '../config.js?v=15';
-import { fruitTexture, drawFruitTexture, MARGEN } from '../render/textures.js?v=15';
+import { CONFIG, STR, DIFICULTADES } from '../config.js?v=18';
+import { fruitTexture, drawFruitTexture, MARGEN } from '../render/textures.js?v=18';
 
 const fmt = (n) => Math.round(n).toLocaleString('es-ES');
 const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
